@@ -1,0 +1,43 @@
+global
+  log 127.0.0.1 local0
+  log 127.0.0.1 local1 notice
+  maxconn {{with $maxconn:=key "service/haproxy/maxconn"}}{{$maxconn}}{{else}}1024{{end}}
+
+defaults
+  log global
+  mode http
+  option httplog
+  option dontlognull
+  timeout connect 5000
+  timeout client 10000
+  timeout server 10000
+
+listen stats :70
+  stats enable
+  stats uri /
+
+frontend  main *:80
+  default_backend    worker
+  mode http
+
+backend aj_backends
+  mode http
+  option forwardfor
+  # http-request set-header X-Forwarded-Port %[dst_port]
+  balance roundrobin
+  server weba weba:80 check
+  server webb webb:80 check
+  server webc webc:80 check
+  # option httpchk OPTIONS * HTTP/1.1\r\nHost:\ localhost
+  option httpchk GET /
+  http-check expect status 200
+
+backend worker
+  mode http
+  option forwardfor
+  balance roundrobin{{range service "worker"}}
+  server {{.ID}} {{.Address}}:{{.Port}} check{{end}}
+  option httpchk GET /
+  http-check expect status 200
+
+

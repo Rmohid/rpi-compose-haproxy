@@ -1,26 +1,48 @@
-weba:
+web:
   build: node/.
   expose:
     - 80
 
-webb:
-  build: node/.
-  expose:
-    - 80
+# docker run -d -p 8500:8500 -v /data hypriot/rpi-consul -server -data-dir /data -bootstrap-expect 1 -ui-dir /ui
+consul:
+  build: consul/.
+  ports:
+   - "8500:8500"
+  command: -server -data-dir /data -bootstrap-expect 1 -ui-dir /ui
 
-webc:
-  build: node/.
-  expose:
-    - 80
+# docker run -d 
+#   -v ./haproxy/:/haproxy/ 
+#   hypriot/rpi-consul-template 
+#   -consul <CONSUL IP>:8500 -template "/haproxy/haproxy.ctmpl:/haproxy/haproxy.cfg:<script to reload haproxy>"
+
+consul-template:
+  build: consul-template/.
+  volumes:
+   - ./haproxy/:/haproxy/
+  command: -consul localhost:8500 -template "/haproxy/haproxy.ctmpl:/haproxy/haproxy.cfg:service haproxy restart"
+
+# docker run -d \
+#   --name=registrator \
+#   --net=host \
+#   --volume=/var/run/docker.sock:/tmp/docker.sock \
+#   gliderlabs/registrator:latest \
+#     consul://localhost:8500
+
+registrator:
+  build: registrator/.
+  net: "host"
+  volumes:
+   - /var/run/docker.sock:/tmp/docker.sock
+  links:
+   - consul
+  command: consul://consul:8500
 
 haproxy:
   image: hypriot/rpi-haproxy
   volumes:
-   - haproxy:/haproxy-override
+   - ./haproxy:/haproxy-override
   links:
-   - weba
-   - webb
-   - webc
+   - web
   ports:
    - "81:80"
    - "70:70"
