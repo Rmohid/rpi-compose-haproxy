@@ -6,32 +6,43 @@ Target: help ## Description
 .FORCE:
 
 help: ##  This help dialog.
-	@cat $(MAKEFILE_LIST) | perl -ne 's/(^\S+): .*##\s*(.+)/printf " %-16s %s\n", $$1,$$2/eg'
+	@cat $(MAKEFILE_LIST) | perl -ne 's/(^\S+): .*##\s*(.+)/printf "\n %-16s %s", $$1,$$2/eg'
 
 consul: .FORCE ## Run consul container
-	#cd $@; docker build -t rpi-$@ .
+	docker stop $@ || true
+	docker rm $@ || true
 	docker run -d --net=host --name=consul -p 8500:8500 -v /data \
 	   hypriot/rpi-$@ \
 	   agent -server -data-dir=/data -bootstrap-expect=1 -ui-dir=/ui
-	   #agent -server -data-dir=/data -bootstrap-expect=1 -ui-dir=/ui -advertise=$(LOCALIP)
 	   docker logs $@
 
 registrator: .FORCE ## Run registrator container
-	#cd $@; docker build -t rpi-$@ .
-	docker run -d --name=registrator --net=host -v /var/run/docker.sock:/tmp/docker.sock  \
-	   hypriot/rpi-$@ -internal consul://localhost:8500
+	docker stop $@ || true
+	docker rm $@ || true
+	docker run -d --net=host --name=registrator -v /var/run/docker.sock:/tmp/docker.sock  \
+	   hypriot/rpi-$@ \
+	   -internal consul://localhost:8500
 	   docker logs $@
 
 consul-template: .FORCE ## Run consul-template container
-	#cd $@; docker build -t rpi-$@ .
-	docker run -d --name=consul-template -v ./haproxy/:/haproxy/ \
-	   hypriot/rpi-$@ -consul localhost:8500 -template "./haproxy/haproxy.ctmpl:./haproxy/haproxy.cfg:make haproxy-restart"
+	docker stop $@ || true
+	docker rm $@ || true
+	docker run -d --net=host --name=consul-template -v $$PWD/haproxy/:/haproxy \
+	   hypriot/rpi-$@ \
+	   -consul localhost:8500 -template "/haproxy/haproxy.ctmpl:/haproxy/haproxy.cfg"
 	   docker logs $@
 
-haproxy: .FORCE ## Run haproxy container
-	cd $@; docker build -t rpi-$@ .
-	docker run -d --net=host -v --name=haproxy  ./haproxy/:/haproxy/ \
-	  rpi-$@ -p 81:80 
+haproxy-build: .FORCE  ## Build the haproxy image
+	docker stop $@ || true
+	docker rm $@ || true
+	cd haproxy; docker build -t rpi-haproxy .
+
+haproxy: .FORCE  ## Run haproxy container
+	docker stop $@ || true
+	docker rm $@ || true
+	docker run -d --net=host --name=haproxy -p 82:80 -p 1936:1936 -v $$PWD/haproxy/:/haproxy-override \
+	  hypriot/rpi-$@ \
+	  sh /haproxy-override/start-haproxy.sh 
 	  docker logs $@
 
 haproxy-restart: ## Restart haproxy container
@@ -50,7 +61,10 @@ clean: ## Remove all containers
 	docker rm `docker ps -a -q`
 
 test: ## Basic testing
-	echo testing
+	echo testing 
+	
+test-consul-template: ## Dry run template generation
+	docker run --net=host -v $$PWD/haproxy/:/haproxy/ --rm hypriot/rpi-consul-template -consul=localhost:8500  -template "/haproxy/haproxy.ctmpl:/haproxy/haproxy.cfg" -dry -once
 
 show-services: ## Show services registered in consul
 	curl -s localhost:8500/v1/catalog/services | jq .

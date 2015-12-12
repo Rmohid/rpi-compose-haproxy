@@ -17,7 +17,8 @@ Notes:
 ### TODO
 - [x] Use consul for service discovery
 - [x] Use registrator for service registration
-- [ ] Use consul-template to update haproxy
+- [x] Use consul-template to update haproxy.cfg
+- [ ] Get haproxy to reload cfg file change
 - [ ] Test service increase/decrease in circleCi
 - [ ] Add redis service
 - [ ] Add redis replication

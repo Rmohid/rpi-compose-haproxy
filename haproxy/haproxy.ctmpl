@@ -1,41 +1,40 @@
+
 global
   log 127.0.0.1 local0
   log 127.0.0.1 local1 notice
-  maxconn {{with $maxconn:=key "service/haproxy/maxconn"}}{{$maxconn}}{{else}}1024{{end}}
+  chroot /var/lib/haproxy
+  user haproxy
+  group haproxy
+  # daemon
 
 defaults
   log global
   mode http
   option httplog
   option dontlognull
-  timeout connect 5000
-  timeout client 10000
-  timeout server 10000
+  timeout connect 5000ms
+  timeout client 50000ms
+  timeout server 50000ms
+  errorfile 400 /etc/haproxy/errors/400.http
+  errorfile 403 /etc/haproxy/errors/403.http
+  errorfile 408 /etc/haproxy/errors/408.http
+  errorfile 500 /etc/haproxy/errors/500.http
+  errorfile 502 /etc/haproxy/errors/502.http
+  errorfile 503 /etc/haproxy/errors/503.http
+  errorfile 504 /etc/haproxy/errors/504.http
 
-listen stats :70
+listen stats :443
   stats enable
   stats uri /
 
-frontend  main *:80
+frontend  mymain *:81
   default_backend    worker
   mode http
-
-backend aj_backends
-  mode http
-  option forwardfor
-  # http-request set-header X-Forwarded-Port %[dst_port]
-  balance roundrobin
-  server weba weba:80 check
-  server webb webb:80 check
-  server webc webc:80 check
-  # option httpchk OPTIONS * HTTP/1.1\r\nHost:\ localhost
-  option httpchk GET /
-  http-check expect status 200
 
 backend worker
   mode http
   option forwardfor
-  balance roundrobin{{range service "worker"}}
+  balance roundrobin{{range service "rpi-worker"}}
   server {{.ID}} {{.Address}}:{{.Port}} check{{end}}
   option httpchk GET /
   http-check expect status 200
